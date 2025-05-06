@@ -10,11 +10,6 @@ import (
 	"github.com/rs/cors"
 )
 
-type TranslateRequest struct {
-	Text string `json:"text"`
-	To   string `json:"to"`
-}
-
 type TranslateResponse struct {
 	TranslatedText string `json:"translatedText,omitempty"`
 	Status         bool   `json:"status"`
@@ -22,21 +17,22 @@ type TranslateResponse struct {
 }
 
 func TranslateHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var request TranslateRequest
-	err := json.NewDecoder(r.Body).Decode(&request)
-	if err != nil {
-		sendErrorResponse(w, "Invalid request payload", http.StatusBadRequest)
+	text := r.URL.Query().Get("text")
+	to := r.URL.Query().Get("to")
+
+	if text == "" || to == "" {
+		sendErrorResponse(w, "Text and to parameters are required", http.StatusBadRequest)
 		return
 	}
 
-	translated, err := gtranslate.TranslateWithParams(request.Text, gtranslate.TranslationParams{
+	translated, err := gtranslate.TranslateWithParams(text, gtranslate.TranslationParams{
 		From: "auto",
-		To:   request.To,
+		To:   to,
 	})
 	if err != nil {
 		sendErrorResponse(w, "Translation failed", http.StatusInternalServerError)
@@ -57,24 +53,22 @@ func sendErrorResponse(w http.ResponseWriter, message string, statusCode int) {
 		Status:  false,
 		Message: message,
 	}
+
 	sendJSONResponse(w, response, statusCode)
 }
 
 func sendJSONResponse(w http.ResponseWriter, data interface{}, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	err := json.NewEncoder(w).Encode(data)
-	if err != nil {
-		log.Printf("Failed to encode JSON response: %v", err)
-	}
+	json.NewEncoder(w).Encode(data)
 }
 
 func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/translate", TranslateHandler)
 
-	c := cors.Default().Handler(mux)
+	handler := cors.Default().Handler(mux)
 
-	fmt.Println("Starting server on http://localhost:8000")
-	log.Fatal(http.ListenAndServe(":8000", c))
+	fmt.Println("Server is running on port 8080...")
+	log.Fatal(http.ListenAndServe(":8080", handler))
 }
